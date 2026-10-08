@@ -28,7 +28,7 @@ function setup() {
   textFont("Georgia");
 
   // REAL PEONY VIDEO
-  flowerVideo = createVideo("videos/peony-bloom.mp4");
+ flowerVideo = createVideo("peony-bloom.mp4");
   flowerVideo.hide();
   flowerVideo.volume(0);
   flowerVideo.pause();
