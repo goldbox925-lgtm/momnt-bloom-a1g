@@ -1,15 +1,15 @@
 
 let products = [];
+let flowerVideo;
 let collageItems = [];
 let petals = [];
 let stars = [];
 
 let selectedIndex = 0;
 let bloom = 0;
-let targetBloom = 0;
 let storm = false;
 let collageHover = -1;
-let hoveredJewel = false;
+let videoFinished = false;
 
 let bloomButton;
 let nextButton;
@@ -27,12 +27,24 @@ function setup() {
   rectMode(CENTER);
   textFont("Georgia");
 
+  // REAL PEONY VIDEO
+  flowerVideo = createVideo("videos/peony-bloom.mp4");
+  flowerVideo.hide();
+  flowerVideo.volume(0);
+  flowerVideo.pause();
+
+  flowerVideo.elt.addEventListener("ended", () => {
+    videoFinished = true;
+    flowerVideo.pause();
+  });
+
   if (!Array.isArray(products)) {
     products = Object.values(products);
   }
 
-  products = products.filter(p => p.image);
+  products = products.filter(p => p && p.image);
 
+  // Load original jewelry images without changing colors
   for (let p of products) {
     p.ready = false;
     p.brightest = { x: 0.5, y: 0.5 };
@@ -40,11 +52,11 @@ function setup() {
     loadImage(
       p.image,
       img => {
-        p.img = img;
         p.brightest = findBrightestPoint(img);
+        p.img = img;
         p.ready = true;
       },
-      () => console.log("Image error:", p.image)
+      () => console.log("Image not found:", p.image)
     );
   }
 
@@ -58,12 +70,19 @@ function currentProduct() {
   return products[selectedIndex] || null;
 }
 
+function flowerCenter() {
+  return {
+    x: width * 0.38,
+    y: height * 0.56
+  };
+}
+
 // BACKGROUND
 
 function createStars() {
   stars = [];
 
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; i < 120; i++) {
     stars.push({
       x: random(width),
       y: random(height),
@@ -93,14 +112,11 @@ function drawBackground() {
   background(255, 237, 243);
   noStroke();
 
-  fill(255, 255, 255, 120);
+  fill(255, 255, 255, 100);
   circle(width * 0.28, height * 0.4, 650);
 
   fill(247, 183, 205, 55);
   circle(width * 0.78, height * 0.65, 560);
-
-  fill(238, 173, 210, 35);
-  circle(width * 0.16, height * 0.83, 440);
 
   for (let s of stars) {
     let a = 110 + 100 *
@@ -110,6 +126,8 @@ function drawBackground() {
     circle(s.x, s.y, s.r);
   }
 }
+
+// FALLING PETALS
 
 function drawFloatingPetals() {
   for (let p of petals) {
@@ -144,6 +162,20 @@ function drawFloatingPetals() {
   }
 }
 
+// VIDEO PLAYBACK
+
+function playBloom() {
+  if (!flowerVideo) return;
+
+  bloom = 0;
+  videoFinished = false;
+
+  flowerVideo.time(0);
+  flowerVideo.play();
+
+  bloomButton.html("REPLAY THE FLOWER ✿");
+}
+
 // BUTTONS
 
 function createControls() {
@@ -157,20 +189,13 @@ function createControls() {
   stormButton.position(370, 110);
   collageButton.position(535, 110);
 
-  bloomButton.mousePressed(() => {
-    targetBloom = targetBloom === 1 ? 0 : 1;
-    updateBloomButton();
-  });
+  bloomButton.mousePressed(() => playBloom());
 
   nextButton.mousePressed(() => {
     if (products.length === 0) return;
-
-    selectedIndex =
-      (selectedIndex + 1) % products.length;
-
-    bloom = 0;
-    targetBloom = 1;
-    updateBloomButton();
+    selectedIndex = (selectedIndex + 1) % products.length;
+    createBloomCollage();
+    playBloom();
   });
 
   stormButton.mousePressed(() => {
@@ -198,38 +223,40 @@ function createControls() {
   }
 }
 
-function updateBloomButton() {
-  bloomButton.html(
-    targetBloom === 1
-      ? "CLOSE THE FLOWER ✿"
-      : "OPEN THE FLOWER ✿"
-  );
-}
-
-// MAIN ANIMATION
+// MAIN DRAW
 
 function draw() {
   drawBackground();
 
-  bloom = lerp(bloom, targetBloom, 0.055);
-
   let c = flowerCenter();
 
-  let jewelSize = min(
-    width * 0.28,
-    height * 0.48,
-    370
-  );
+  if (flowerVideo && flowerVideo.elt.readyState >= 2) {
+    let duration = flowerVideo.duration();
+    let time = flowerVideo.time();
 
-  hoveredJewel =
-    bloom > 0.8 &&
-    dist(mouseX, mouseY, c.x, c.y) <
-      jewelSize * 0.48;
+    if (duration > 0) {
+      let progress = constrain(time / duration, 0, 1);
+      bloom = constrain(
+        map(progress, 0.55, 0.95, 0, 1),
+        0,
+        1
+      );
+    }
+  }
 
+  if (videoFinished) bloom = 1;
+
+  drawVideoFlower(c.x, c.y);
   drawFloatingPetals();
   drawBloomCollage();
-  drawFlower(c.x, c.y);
-  drawJewelry(c.x, c.y, jewelSize);
+
+  let jewelSize = min(
+    width * 0.23,
+    height * 0.37,
+    300
+  );
+
+  drawJewelry(c.x, c.y + 20, jewelSize);
 
   if (bloom > 0.65) {
     drawHologram();
@@ -238,14 +265,21 @@ function draw() {
   drawHeader();
 }
 
-function flowerCenter() {
-  return {
-    x: width * 0.38,
-    y: height * 0.57
-  };
+// REAL FLOWER VIDEO
+
+function drawVideoFlower(cx, cy) {
+  if (!flowerVideo || flowerVideo.elt.readyState < 2) return;
+
+  let videoWidth = min(width * 0.65, 900);
+  let videoHeight = videoWidth * 9 / 16;
+
+  push();
+  imageMode(CENTER);
+  image(flowerVideo, cx, cy, videoWidth, videoHeight);
+  pop();
 }
 
-// BLOOM COLLAGE MACHINE
+// COLLAGE MACHINE
 
 function createBloomCollage() {
   collageItems = [];
@@ -253,34 +287,64 @@ function createBloomCollage() {
   if (products.length < 2) return;
 
   let positions = [
-    [0.12, 0.35],
-    [0.21, 0.78],
-    [0.58, 0.27],
-    [0.61, 0.80],
-    [0.84, 0.24],
-    [0.88, 0.78]
+    [0.10, 0.33],
+    [0.10, 0.60],
+    [0.18, 0.85],
+    [0.56, 0.23],
+    [0.62, 0.77],
+    [0.88, 0.82]
   ];
 
   let indices = products.map((p, i) => i);
   indices = shuffle(indices);
-
-  // Do not repeat the central product
   indices = indices.filter(i => i !== selectedIndex);
 
   let count = min(6, indices.length);
 
   for (let i = 0; i < count; i++) {
-    let pos = positions[i];
-
     collageItems.push({
       index: indices[i],
-      x: width * pos[0] + random(-18, 18),
-      y: height * pos[1] + random(-18, 18),
-      size: random(100, 160),
-      angle: random(-0.18, 0.18),
+      x: width * positions[i][0],
+      y: height * positions[i][1],
+      size: random(90, 140),
+      angle: random(-0.16, 0.16),
       phase: random(TWO_PI)
     });
   }
+}
+
+// Draw a circular cropped jewelry image
+function drawRoundJewelry(img, x, y, size) {
+  push();
+  translate(x, y);
+
+  // Soft pearl background and shadow
+  drawingContext.shadowBlur = 20;
+  drawingContext.shadowColor = "#e9a4c1";
+
+  noStroke();
+  fill(255, 250, 252);
+  circle(0, 0, size + 10);
+
+  drawingContext.shadowBlur = 0;
+
+  // Clip the photo to a circle
+  drawingContext.save();
+  drawingContext.beginPath();
+  drawingContext.arc(0, 0, size / 2, 0, TWO_PI);
+  drawingContext.closePath();
+  drawingContext.clip();
+
+  image(img, 0, 0, size, size);
+
+  drawingContext.restore();
+
+  noFill();
+  stroke(232, 170, 194, 180);
+  strokeWeight(1);
+  circle(0, 0, size + 10);
+
+  pop();
 }
 
 function drawBloomCollage() {
@@ -295,212 +359,59 @@ function drawBloomCollage() {
     let floating =
       sin(frameCount * 0.018 + item.phase) * 7;
 
-    let d = dist(
+    let hovered = dist(
       mouseX,
       mouseY,
       item.x,
       item.y + floating
-    );
-
-    let hovered = d < item.size * 0.52;
+    ) < item.size * 0.52;
 
     if (hovered) collageHover = i;
 
     push();
     translate(item.x, item.y + floating);
     rotate(item.angle);
-    scale(hovered ? 1.18 : 1);
+    scale(hovered ? 1.16 : 1);
 
-    drawingContext.shadowBlur = hovered ? 30 : 15;
-    drawingContext.shadowColor = "#e9a4c1";
-
-    noStroke();
-    fill(255, 250, 252, 245);
-    circle(0, 0, item.size + 18);
-
-    drawingContext.shadowBlur = 0;
-
-    image(p.img, 0, 0, item.size, item.size);
+    drawRoundJewelry(p.img, 0, 0, item.size);
 
     if (hovered) {
       drawSparkle(p.brightest, item.size);
     }
 
-    noFill();
-    stroke(225, 145, 180, 160);
-    strokeWeight(1.5);
-    circle(0, 0, item.size + 20);
-
     pop();
   }
-}
-
-// FLOWER
-
-function drawFlower(cx, cy) {
-  let flowerSize = min(
-    width * 0.62,
-    height * 0.88,
-    720
-  );
-
-  push();
-  translate(cx, cy);
-
-  drawingContext.shadowBlur = 30;
-  drawingContext.shadowColor = "#e9a6bd";
-
-  for (let i = 0; i < 12; i++) {
-    drawFlowerPetal(
-      TWO_PI * i / 12,
-      flowerSize * 0.37,
-      flowerSize * 0.26,
-      bloom,
-      i,
-      0
-    );
-  }
-
-  for (let i = 0; i < 9; i++) {
-    drawFlowerPetal(
-      TWO_PI * i / 9 + 0.2,
-      flowerSize * 0.29,
-      flowerSize * 0.22,
-      bloom,
-      i,
-      1
-    );
-  }
-
-  for (let i = 0; i < 7; i++) {
-    drawFlowerPetal(
-      TWO_PI * i / 7 + 0.4,
-      flowerSize * 0.22,
-      flowerSize * 0.19,
-      bloom,
-      i,
-      2
-    );
-  }
-
-  drawingContext.shadowBlur = 0;
-
-  noStroke();
-  fill(255, 245, 248, 210);
-
-  circle(
-    0,
-    0,
-    flowerSize * (0.22 + bloom * 0.13)
-  );
-
-  pop();
-}
-
-function drawFlowerPetal(
-  angle,
-  length,
-  petalWidth,
-  openAmount,
-  index,
-  layer
-) {
-  push();
-  rotate(angle);
-
-  let spread = openAmount * length * 0.6;
-  let lift = (1 - openAmount) * length * 0.28;
-
-  translate(0, -spread + lift);
-
-  rotate(
-    sin(frameCount * 0.012 + index) * 0.025
-  );
-
-  let colors = [
-    color(246, 175, 195, 220),
-    color(255, 198, 215, 230),
-    color(255, 220, 229, 240)
-  ];
-
-  fill(colors[layer]);
-  stroke(255, 240, 245, 120);
-  strokeWeight(1);
-
-  beginShape();
-  vertex(0, 0);
-
-  bezierVertex(
-    -petalWidth * 0.7,
-    -length * 0.25,
-    -petalWidth * 0.85,
-    -length * 0.85,
-    0,
-    -length
-  );
-
-  bezierVertex(
-    petalWidth * 0.85,
-    -length * 0.85,
-    petalWidth * 0.7,
-    -length * 0.25,
-    0,
-    0
-  );
-
-  endShape(CLOSE);
-
-  stroke(255, 255, 255, 65);
-  line(0, -length * 0.15, 0, -length * 0.8);
-
-  pop();
 }
 
 // CENTRAL JEWELRY
 
 function drawJewelry(cx, cy, size) {
   let p = currentProduct();
-  if (!p || !p.ready) return;
 
-  let appear = constrain(
-    map(bloom, 0.35, 0.95, 0, 1),
-    0,
-    1
-  );
+  if (!p || !p.ready || bloom <= 0) return;
 
-  if (appear <= 0) return;
+  let hovered =
+    dist(mouseX, mouseY, cx, cy) < size * 0.5;
 
   push();
   translate(cx, cy);
 
-  scale(appear * (hoveredJewel ? 1.12 : 1));
+  let appear = bloom * (hovered ? 1.1 : 1);
+  scale(appear);
 
-  translate(
-    0,
-    sin(frameCount * 0.022) * 6
-  );
+  translate(0, sin(frameCount * 0.022) * 5);
 
-  drawingContext.shadowBlur =
-    hoveredJewel ? 45 : 25;
+  // Pearl circle instead of white square
+  drawRoundJewelry(p.img, 0, 0, size);
 
-  drawingContext.shadowColor = "#ffffff";
-
-  noStroke();
-  fill(255, 251, 252, 240);
-  ellipse(0, 0, size * 1.12, size * 1.12);
-
-  drawingContext.shadowBlur = 0;
-
-  image(p.img, 0, 0, size, size);
-
-  if (hoveredJewel) {
+  if (hovered) {
     drawSparkle(p.brightest, size);
   }
 
-  // Small sparkling diamonds around the ring
-  for (let i = 0; i < 12; i++) {
-    let a = TWO_PI * i / 12 + frameCount * 0.002;
-    let r = size * 0.63;
+  // Decorative diamond sparkles
+  for (let i = 0; i < 14; i++) {
+    let a = TWO_PI * i / 14 + frameCount * 0.002;
+    let r = size * 0.60;
 
     let x = cos(a) * r;
     let y = sin(a) * r;
@@ -518,7 +429,7 @@ function drawJewelry(cx, cy, size) {
   pop();
 }
 
-// SEARCHING FOR THE BRIGHTEST POINT
+// BRIGHTEST POINT
 
 function findBrightestPoint(img) {
   img.loadPixels();
@@ -545,7 +456,6 @@ function findBrightestPoint(img) {
 
       let brightness = (r + g + b) / 3;
 
-      // Ignore nearly white backgrounds
       if (brightness > 245) continue;
 
       if (brightness > best) {
@@ -580,20 +490,10 @@ function drawSparkle(point, size) {
   line(0, -radius, 0, radius);
 
   strokeWeight(1);
-
-  line(
-    -radius * 0.5,
-    -radius * 0.5,
-    radius * 0.5,
-    radius * 0.5
-  );
-
-  line(
-    -radius * 0.5,
-    radius * 0.5,
-    radius * 0.5,
-    -radius * 0.5
-  );
+  line(-radius * 0.5, -radius * 0.5,
+       radius * 0.5, radius * 0.5);
+  line(-radius * 0.5, radius * 0.5,
+       radius * 0.5, -radius * 0.5);
 
   noStroke();
   fill(255);
@@ -603,7 +503,7 @@ function drawSparkle(point, size) {
   pop();
 }
 
-// HOLOGRAM
+// HOLOGRAPHIC PRODUCT PANEL
 
 function drawHologram() {
   let p = currentProduct();
@@ -620,16 +520,14 @@ function drawHologram() {
   drawingContext.shadowBlur = 30;
   drawingContext.shadowColor = "#f1a9c6";
 
-  fill(255, 245, 250, 220);
+  fill(255, 245, 250, 225);
   stroke(220, 145, 180, 170);
   strokeWeight(1.5);
-
   rect(x, y, w, h, 20);
 
   drawingContext.shadowBlur = 0;
 
   stroke(230, 150, 185, 18);
-
   for (let yy = y + 12; yy < y + h - 12; yy += 8) {
     line(x + 12, yy, x + w - 12, yy);
   }
@@ -639,37 +537,24 @@ function drawHologram() {
 
   fill(166, 83, 119);
   textSize(12);
-  text(
-    "MOMNT / BLOOM COLLECTION",
-    x + 24,
-    y + 36
-  );
+  text("MOMNT / BLOOM COLLECTION", x + 24, y + 36);
 
   fill(90, 44, 66);
-  textSize(22);
-  text(
-    p.name || "Jewelry",
-    x + 24,
-    y + 78,
-    w - 48,
-    165
-  );
+  textSize(20);
+
+  let shortName = (p.name || "Jewelry")
+    .split(" - ")[0]
+    .slice(0, 110);
+
+  text(shortName, x + 24, y + 78, w - 48, 160);
 
   fill(176, 100, 132);
   textSize(12);
-  text(
-    "A MOMENT OF BEAUTY",
-    x + 24,
-    y + h - 85
-  );
+  text("A MOMENT OF BEAUTY", x + 24, y + h - 85);
 
   fill(155, 66, 109);
   textSize(15);
-  text(
-    "DISCOVER THIS JEWEL ↗",
-    x + 24,
-    y + h - 38
-  );
+  text("DISCOVER THIS JEWEL ↗", x + 24, y + h - 38);
 
   pop();
 }
@@ -694,12 +579,7 @@ function drawHeader() {
   textAlign(RIGHT);
   fill(157, 96, 126);
   textSize(11);
-
-  text(
-    "LOVE ✿ LIGHT ✿ JEWELRY",
-    width - 35,
-    61
-  );
+  text("LOVE ✿ LIGHT ✿ JEWELRY", width - 35, 61);
 
   textSize(10);
   text(
@@ -714,15 +594,12 @@ function drawHeader() {
 function mousePressed() {
   if (mouseY < 170) return;
 
-  // Select a jewel from the collage
   if (collageHover >= 0) {
     let item = collageItems[collageHover];
 
     selectedIndex = item.index;
-
-    bloom = 0;
-    targetBloom = 1;
-    updateBloomButton();
+    createBloomCollage();
+    playBloom();
 
     return;
   }
@@ -730,7 +607,6 @@ function mousePressed() {
   let p = currentProduct();
   if (!p) return;
 
-  // Open the original product page
   if (bloom > 0.65) {
     let x = width * 0.69;
     let y = height * 0.30;
@@ -738,10 +614,8 @@ function mousePressed() {
     let h = 360;
 
     if (
-      mouseX > x &&
-      mouseX < x + w &&
-      mouseY > y &&
-      mouseY < y + h
+      mouseX > x && mouseX < x + w &&
+      mouseY > y && mouseY < y + h
     ) {
       if (
         p.source &&
@@ -749,22 +623,21 @@ function mousePressed() {
       ) {
         window.open(p.source, "_blank");
       }
-
       return;
     }
   }
 
-  // Open or close the flower
   let c = flowerCenter();
 
   if (
     dist(mouseX, mouseY, c.x, c.y) <
     min(width * 0.3, height * 0.42)
   ) {
-    targetBloom = targetBloom === 1 ? 0 : 1;
-    updateBloomButton();
+    playBloom();
   }
 }
+
+// RESIZE
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
